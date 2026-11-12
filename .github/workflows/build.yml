@@ -62,7 +62,7 @@ jobs:
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
           export FOX_BUILD_TYPE=Unofficial
-          export FOX_VERSION=R12.1
+          export FOX_MAINTAINER_PATCH_VERSION=1
           export LC_ALL=C
           lunch twrp_c330ae-eng
           set -e
