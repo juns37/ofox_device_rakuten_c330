@@ -1,0 +1,103 @@
+name: OrangeFox C330
+
+on:
+  workflow_dispatch:
+    inputs:
+      fox_branch:
+        description: OrangeFox branch
+        default: '12.1'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/local/.ghcup
+          sudo docker image prune -af || true
+          sudo apt-get -qq remove -y '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' '^mysql-.*' azure-cli google-chrome-stable firefox powershell mono-devel || true
+          sudo apt-get -qq autoremove -y || true
+          df -h /
+
+      - name: Install build deps
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev \
+            libc6-dev-i386 libncurses5 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev \
+            libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig python3 python-is-python3 \
+            rsync bc ccache lzop pngcrush schedtool squashfs-tools
+          mkdir -p ~/bin
+          curl -sSL https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod +x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+          git config --global user.name "builder"
+          git config --global user.email "builder@localhost"
+          git config --global color.ui false
+
+      - name: Sync OrangeFox
+        run: |
+          git clone --depth 1 https://gitlab.com/OrangeFox/sync.git ~/sync
+          cd ~/sync
+          ./orangefox_sync.sh --branch ${{ github.event.inputs.fox_branch }} --path ~/fox
+          df -h /
+
+      - name: Device tree
+        uses: actions/checkout@v4
+        with:
+          path: device-tree
+
+      - name: Place tree + source patch
+        run: |
+          mkdir -p ~/fox/device/rakuten
+          cp -a device-tree ~/fox/device/rakuten/c330ae
+          rm -rf ~/fox/device/rakuten/c330ae/.git ~/fox/device/rakuten/c330ae/.github
+          python3 device-tree/tools/patch_source.py ~/fox
+
+      - name: Build
+        run: |
+          cd ~/fox
+          set +e
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export FOX_BUILD_TYPE=Unofficial
+          export FOX_VERSION=R12.1
+          export LC_ALL=C
+          lunch twrp_c330ae-eng
+          set -e
+          mka adbd recoveryimage -j$(nproc --all)
+
+      - name: Fix header + re-sign
+        run: |
+          cd ~/fox/out/target/product/c330ae
+          ls -la
+          IMG=$(ls OrangeFox*.img | head -1)
+          AVB=~/fox/out/host/linux-x86/bin/avbtool
+          [ -x "$AVB" ] || AVB=~/fox/external/avb/avbtool.py
+          python3 $GITHUB_WORKSPACE/device-tree/tools/fix_header.py "$IMG" 16.0.0 2026-10
+          python3 $AVB erase_footer --image "$IMG" || $AVB erase_footer --image "$IMG"
+          $AVB add_hash_footer --image "$IMG" --partition_name recovery --partition_size 67108864 \
+            --key ~/fox/external/avb/test/data/testkey_rsa4096.pem --algorithm SHA256_RSA4096
+          $AVB info_image --image "$IMG" | head -20
+          mkdir -p $GITHUB_WORKSPACE/out
+          cp "$IMG" $GITHUB_WORKSPACE/out/
+          cp OrangeFox*.zip $GITHUB_WORKSPACE/out/ 2>/dev/null || true
+          sha256sum $GITHUB_WORKSPACE/out/*
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeFox-C330
+          path: out/*
+          retention-days: 14
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ~/fox/out/error.log
+            ~/fox/out/verbose.log.gz
+          if-no-files-found: ignore
