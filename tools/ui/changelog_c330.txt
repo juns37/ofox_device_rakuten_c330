@@ -1,0 +1,16 @@
+OrangeFox Recovery R12.1 for C330 (Rakuten Mini)
+-----------------------------------
+
+== R12.1 C330 (source build) ==
+- Built from OrangeFox fox_12.1 source with own c330ae device tree
+- Native A-only build (no ingres binary patches)
+- Kernel 4.19 (MiThorium, from WitAqua)
+- Auto ROM layout: retrofit dynamic (super on system) or legacy block
+- Dynamic: system/vendor/product/system_ext/odm mount via super
+- FBE v2 decryption for Android 16 (WitAqua) without format
+- Keymaster/qseecomd/RPMB libs from WitAqua vendor
+- AVB footer signed like WitAqua recovery
+- Built-in DFE (vendor fstab patch) in Add-ons + "Auto DFE after install"
+- Disable stock recovery restore (Advanced)
+- Install ZIP: "Reboot to recovery after install"
+- Layout tuned for 720x1280 screen, default timezone JST

@@ -1,0 +1,41 @@
+#!/sbin/sh
+OUTFD=$2
+ui() { echo "ui_print $*" >&$OUTFD; echo "ui_print" >&$OUTFD; }
+ui " "
+ui "*******************************"
+ui " Meng DFE for C330 (vendor fstab)"
+ui "*******************************"
+if [ -e /dev/block/mapper/vendor ]; then
+	DEV=/dev/block/mapper/vendor
+else
+	DEV=/dev/block/bootdevice/by-name/vendor
+fi
+ui "- Vendor: $DEV"
+M=/tmp/meng_dfe_vendor
+umount /vendor 2>/dev/null
+mkdir -p $M
+blockdev --setrw $DEV 2>/dev/null
+mount -t ext4 -o rw $DEV $M || { ui "! Gagal mount vendor rw"; exit 1; }
+N=0
+for F in $M/etc/fstab.*; do
+	[ -f "$F" ] || continue
+	grep -qE '[[:space:]]/data[[:space:]]' "$F" || continue
+	cp -p "$F" /tmp/$(basename $F).orig
+	sed -i -E '/[[:space:]]\/data[[:space:]]/{
+s/,(fileencryption|forceencrypt|forcefdeorfbe|encryptable|metadata_encryption|keydirectory)=[^,[:space:]]*//g
+s/([[:space:]])(fileencryption|forceencrypt|forcefdeorfbe|encryptable|metadata_encryption|keydirectory)=[^,[:space:]]*,?/\1/g
+s/,(inlinecrypt|wrappedkey)([,[:space:]]|$)/\2/g
+}' "$F"
+	if cmp -s "$F" /tmp/$(basename $F).orig; then
+		ui "- $(basename $F): sudah tanpa enkripsi"
+	else
+		ui "- $(basename $F): flag enkripsi /data dihapus"
+		N=$((N+1))
+	fi
+	grep -E '[[:space:]]/data[[:space:]]' "$F" | grep -qE 'fileencryption|metadata_encryption' && { ui "! Patch gagal di $(basename $F)"; umount $M; exit 1; }
+done
+sync
+umount $M
+ui "- Selesai ($N file diubah)"
+ui "- Jika data masih terenkripsi: Format Data (ketik yes)"
+exit 0

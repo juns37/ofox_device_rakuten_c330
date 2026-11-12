@@ -54,6 +54,7 @@ jobs:
           cp -a device-tree ~/fox/device/rakuten/c330ae
           rm -rf ~/fox/device/rakuten/c330ae/.git ~/fox/device/rakuten/c330ae/.github
           python3 device-tree/tools/patch_source.py ~/fox
+          python3 device-tree/tools/apply_ui.py ~/fox ~/fox/device/rakuten/c330ae
 
       - name: Build
         run: |

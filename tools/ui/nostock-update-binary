@@ -1,0 +1,45 @@
+#!/sbin/sh
+OUTFD=$2
+ui_print() { echo "ui_print $*" >&$OUTFD; echo "ui_print" >&$OUTFD; }
+M=/tmp/meng_nostock
+ui_print " "
+ui_print "*******************************"
+ui_print " Disable stock recovery restore"
+ui_print "*******************************"
+umount /system_root /system /vendor 2>/dev/null
+mkdir -p $M/s $M/v
+if [ -e /dev/block/mapper/system ]; then
+	SD=/dev/block/mapper/system; VD=/dev/block/mapper/vendor
+	ui_print "- ROM dynamic (super)"
+else
+	SD=/dev/block/bootdevice/by-name/system; VD=/dev/block/bootdevice/by-name/vendor
+fi
+blockdev --setrw $SD 2>/dev/null
+blockdev --setrw $VD 2>/dev/null
+mount -t ext4 -o rw $SD $M/s || { ui_print "! Gagal mount system rw"; exit 1; }
+mount -t ext4 -o rw $VD $M/v || ui_print "- vendor tidak bisa di-mount rw, dilewati"
+n=0
+for f in $M/s/system/recovery-from-boot.p $M/s/system/bin/install-recovery.sh $M/s/system/etc/install-recovery.sh \
+         $M/s/recovery-from-boot.p $M/v/recovery-from-boot.p $M/v/bin/install-recovery.sh $M/v/etc/recovery.img; do
+	[ -f "$f" ] || continue
+	r=${f#$M/s}; r=${r#$M/v}
+	case "$f" in $M/v/*) r=/vendor$r ;; esac
+	if mv -f "$f" "$f.bak"; then
+		ui_print "- $r -> .bak"
+		n=$((n + 1))
+	else
+		ui_print "! Gagal rename $r"
+	fi
+done
+sync
+umount $M/v 2>/dev/null
+umount $M/s
+if [ $n -eq 0 ]; then
+	ui_print "- Tidak ada file pemulih recovery stok"
+	ui_print "  (ROM ini tidak menimpa OrangeFox)"
+else
+	ui_print "- $n file dinonaktifkan"
+	ui_print "  OrangeFox tidak akan ditimpa recovery stok"
+fi
+ui_print "- Selesai"
+exit 0
